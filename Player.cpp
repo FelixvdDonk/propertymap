@@ -80,8 +80,8 @@ Player::Player(QWindow* parent)
 
 void Player::test1()
 {
-    connect(m_timer, &QTimer::timeout, this, &Player::advance);
-    m_timer->start(16);
+    connect(this, &QQuickView::frameSwapped ,this ,&Player::advance);
+
 }
 
 void Player::test2()
