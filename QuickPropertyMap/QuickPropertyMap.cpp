@@ -29,6 +29,7 @@ void QuickPropertyMap::build()
 
 void QuickPropertyMap::insert(int i, const QVariant& value)
 {
+    if(!m_insertBlock){
     if (i >= 0 && i < m_propertyList.count())
     {
         DynamicProperty& p = m_propertyList[i];
@@ -36,9 +37,32 @@ void QuickPropertyMap::insert(int i, const QVariant& value)
         if (p.value != value)
         {
             p.value = value;
-            QMetaObject::activate(this, m_metaObject, i, nullptr);
+            //if(!m_indexesNeedingRefresh.contains(i)){
+            m_indexesNeedingRefresh.append(i);
+           // }
+
+            //QMetaObject::activate(this, m_metaObject, i, nullptr);
         }
     }
+    }
+}
+
+void QuickPropertyMap::refreshIndexes()
+{
+    for(auto i : m_indexesNeedingRefresh){
+            QMetaObject::activate(this, m_metaObject, i, nullptr);
+    }
+    m_indexesNeedingRefresh.clear();
+}
+
+void QuickPropertyMap::block()
+{
+    m_insertBlock = true;
+}
+
+void QuickPropertyMap::unblock()
+{
+    m_insertBlock = false;
 }
 
 void QuickPropertyMap::buildMetaObject()

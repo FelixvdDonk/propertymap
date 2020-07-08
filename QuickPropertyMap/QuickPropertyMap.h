@@ -18,6 +18,7 @@ signals:
 
 class QuickPropertyMap : public QuickPropertyMapBase
 {
+
     // Meta-object system functions
 public:
     const QMetaObject *metaObject() const override;
@@ -54,6 +55,7 @@ public:
     void insert(int index, const QVariant& value);
     void insert(const QByteArray& name, const QVariant& value) { insert(indexOf(name), value); }
 
+
 public:
     int count()                           const { return m_propertyIndex.count();         }
     int indexOf(const QByteArray& name)   const { return m_propertyIndex.value(name, -1); }
@@ -65,10 +67,16 @@ public:
     int               type (int index) const { return m_propertyList[index].typeId;}
 
     QVariant value(const QByteArray& name) const { int i = indexOf(name); return (i != -1) ? value(i) : QVariant(); }
+    void refreshIndexes();
+    void block();
+    void unblock();
+
+    bool         renderPause = false;
 
 private:
     int my_metacall(QMetaObject::Call call, int id, void** argv);
     void buildMetaObject();
+
 
 private:
     using DynamicProperty = struct {
@@ -79,7 +87,11 @@ private:
 
     QMetaObject* m_metaObject = nullptr;
     bool         m_finalized  = false;
+    bool         m_insertBlock = false;
+
 
     QHash<QByteArray, int>   m_propertyIndex;
     QVector<DynamicProperty> m_propertyList;
+
+    QVector<int >  m_indexesNeedingRefresh;
 };

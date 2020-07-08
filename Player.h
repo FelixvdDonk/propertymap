@@ -21,6 +21,9 @@ public:
 
 public:
     void advance();
+    void metaObjectActivate();
+    void block();
+    void unblock();
 
 public:
     void test1();

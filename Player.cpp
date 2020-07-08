@@ -81,8 +81,15 @@ Player::Player(QWindow* parent)
 void Player::test1()
 
 {
-    connect(this, &QQuickView::frameSwapped ,this ,&Player::advance);
+//    connect(this, &QQuickView::beforeSynchronizing, this, &Player::block );
+//    connect(this, &QQuickView::afterSynchronizing, this, &Player::unblock );
+connect(this, &QQuickView::afterSynchronizing ,this, &Player::metaObjectActivate, Qt::QueuedConnection);
 
+    //connect(this, &QQuickView::beforeSynchronizing, this, &Player::advance, Qt::QueuedConnection );
+
+    m_timer->setTimerType(Qt::PreciseTimer);
+    connect(m_timer, &QTimer::timeout, this, &Player::advance, Qt::QueuedConnection);
+    m_timer->start(5);
 
 
 }
@@ -134,4 +141,20 @@ void Player::advance()
 
     if (m_step % 10 == 0)
         m_propertyMap->insert("fps", int(1000.0 / (t.nsecsElapsed() / 1000000.0)));
+
+}
+
+void Player::metaObjectActivate()
+{
+    m_propertyMap->refreshIndexes();
+}
+
+void Player::block()
+{
+    m_propertyMap->block();
+}
+
+void Player::unblock()
+{
+    m_propertyMap->unblock();
 }

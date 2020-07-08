@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
 
     viewer.setTitle("PropertyMap playground");
     viewer.setSource(QUrl("qrc:/Scene.qml"));
-    viewer.showFullScreen();
+    viewer.show();
 
     return a.exec();
 }
