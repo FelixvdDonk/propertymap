@@ -79,12 +79,11 @@ Player::Player(QWindow* parent)
 }
 
 void Player::test1()
+
 {
-<<<<<<< HEAD
     connect(this, &QQuickView::frameSwapped ,this ,&Player::advance);
-=======
-    connect(this, &QQuickView::beforeRendering,this ,&Player::advance);
->>>>>>> master
+
+
 
 }
 
