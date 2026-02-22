@@ -1,16 +1,16 @@
-import QtQuick 2.0
+import QtQuick
 
 Rectangle {
     id: scene
     color: "black"
-    
+
     property real a: 0.5
-       
+
     focus: true
-    
+
     property int index: 0
-    
-    Keys.onPressed: {
+
+    Keys.onPressed: (event) => {
         if (event.key === Qt.Key_A)
             ngi["x_"+index] -= 1
         else if (event.key === Qt.Key_D)

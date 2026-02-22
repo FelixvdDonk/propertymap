@@ -8,29 +8,36 @@
 #include <QtCore/QVariant>
 
 class QmlPropertyMapPrivate;
+
+/**
+ * @brief A reimplementation of QQmlPropertyMap using Qt 6's QQmlOpenMetaObject.
+ *
+ * This provides a dynamic property map that is directly usable from QML,
+ * acting as a faster alternative to Qt's built-in QQmlPropertyMap for
+ * high-frequency property updates.
+ */
 class QmlPropertyMap : public QObject
 {
     Q_OBJECT
 
 public:
     using FastData = QHash<QByteArray, QVariant>;
-    using PairData = QVector<QPair<QByteArray, QVariant>>;
+    using PairData = QList<QPair<QByteArray, QVariant>>;
 
-public:
-    explicit QmlPropertyMap(QObject *parent = Q_NULLPTR);
-    virtual ~QmlPropertyMap();
+    explicit QmlPropertyMap(QObject *parent = nullptr);
+    ~QmlPropertyMap() override;
 
     QVariant value(const QString &key) const;
     void clear(const QString &key);
 
     void insert(const QString &key, const QVariant &value);
     void insert(const QVariantMap &data);
-    void insert(const FastData& data);
-    void insert(const PairData& data);
+    void insert(const FastData &data);
+    void insert(const PairData &data);
 
     void setCached(bool cached);
 
-    Q_INVOKABLE const QStringList& keys() const;
+    Q_INVOKABLE const QStringList &keys() const;
 
     int count() const;
     int size() const;

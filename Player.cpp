@@ -4,78 +4,111 @@
 #include <QTimer>
 #include <QtMath>
 #include <QQmlContext>
+#include <QRandomGenerator>
 
 #include "QmlPropertyMap/QmlPropertyMap.h"
 #include "QuickPropertyMap/QuickPropertyMap.h"
 #include "StaticPropertyMap/StaticPropertyMap.h"
 
-#define UNUSED_FUNCTION(x) void (*__##x)(x&, const PairData&) = &init; (void)__##x;
+namespace {
 
-namespace
+constexpr int COUNT = 1000;
+constexpr double R = 6;
+
+double posX(int i, double angle) { return (i / 3) * R * cos(angle * M_PI / 180) + 10; }
+double posY(int i, double angle) { return (i / 3) * R * sin(angle * M_PI / 180) + 10; }
+
+using PairData = QList<QPair<QByteArray, QVariant>>;
+
+void initStatic(StaticPropertyMap &pm, const PairData &data)
 {
-    const int COUNT = 1000;
-    const double R = 6;
-
-    double posX(int i, double angle) { return (i / 3) * R * cos(angle * M_PI / 180) + 10; }
-    double posY(int i, double angle) { return (i / 3) * R * sin(angle * M_PI / 180) + 10; }
-
-    using PairData = QVector<QPair<QByteArray, QVariant>>;
-
-    void init(StaticPropertyMap& pm, const PairData& data)
-    {
-        for (const auto& i : data)
-            pm.insert(i.first, i.second);
-    }
-
-    void init(QmlPropertyMap& pm, const PairData& data)
-    {
-        for (const auto& i : data)
-            pm.insert(i.first, i.second);
-    }
-
-    void init(QuickPropertyMap& pm, const PairData& data)
-    {
-        for (const auto& i : data)
-            pm.addProperty(i.first, i.second);
-
-        pm.build();
-    }
+    for (const auto &i : data)
+        pm.insert(i.first, i.second);
 }
 
-Player::Player(QWindow* parent)
+void initQml(QmlPropertyMap &pm, const PairData &data)
+{
+    for (const auto &i : data)
+        pm.insert(i.first, i.second);
+}
+
+void initQuick(QuickPropertyMap &pm, const PairData &data)
+{
+    for (const auto &i : data)
+        pm.addProperty(i.first, i.second);
+    pm.build();
+}
+
+} // anonymous namespace
+
+Player::Player(MapType type, QWindow *parent)
     : QQuickView(parent)
-    , m_propertyMap(new PropertyMap(this))
+    , m_type(type)
     , m_timer(new QTimer(this))
     , m_step(0)
 {
-    UNUSED_FUNCTION(StaticPropertyMap)
-    UNUSED_FUNCTION(QmlPropertyMap)
-    UNUSED_FUNCTION(QuickPropertyMap)
+    // Create the chosen backend
+    switch (m_type) {
+    case MapType::Static: {
+        auto *p = new StaticPropertyMap(this);
+        m_staticMap = p;
+        m_propertyMap = p;
+        break;
+    }
+    case MapType::Qml: {
+        auto *p = new QmlPropertyMap(this);
+        m_qmlMap = p;
+        m_propertyMap = p;
+        break;
+    }
+    case MapType::Quick: {
+        auto *p = new QuickPropertyMap(this);
+        m_quickMap = p;
+        m_propertyMap = p;
+        break;
+    }
+    }
 
     setResizeMode(QQuickView::SizeRootObjectToView);
 
     m_data.resize(3 * COUNT);
     m_speed.resize(COUNT);
 
-    for (int i = 0; i != COUNT; ++i)
-    {
-        m_data[3 * i + 0] = {QString("x_%1").arg(i).toLatin1(), 0.0};
-        m_data[3 * i + 1] = {QString("y_%1").arg(i).toLatin1(), 0.0};
-        m_data[3 * i + 2] = {QString("r_%1").arg(i).toLatin1(), 0.0};
+    auto *rng = QRandomGenerator::global();
 
-        m_speed[i] = 1.0 * qrand() / RAND_MAX + 0.1;
+    for (int i = 0; i != COUNT; ++i) {
+        m_data[3 * i + 0] = {QStringLiteral("x_%1").arg(i).toLatin1(), 0.0};
+        m_data[3 * i + 1] = {QStringLiteral("y_%1").arg(i).toLatin1(), 0.0};
+        m_data[3 * i + 2] = {QStringLiteral("r_%1").arg(i).toLatin1(), 0.0};
+
+        m_speed[i] = rng->generateDouble() + 0.1;
     }
 
     m_data.append({QByteArray("count"), COUNT});
-    m_data.append({QByteArray("fps")  , 0    });
+    m_data.append({QByteArray("fps"), 0});
     m_data.append({QByteArray("title"), m_propertyMap->metaObject()->className()});
 
-    init(*m_propertyMap, m_data);
+    // Initialize with backend-specific init
+    switch (m_type) {
+    case MapType::Static: initStatic(*m_staticMap, m_data); break;
+    case MapType::Qml:    initQml(*m_qmlMap, m_data);       break;
+    case MapType::Quick:  initQuick(*m_quickMap, m_data);    break;
+    }
+
     rootContext()->setContextProperty("ngi", m_propertyMap);
 
     test1();
     test2();
     test3();
+}
+
+void Player::mapInsert(const QByteArray &key, const QVariant &value)
+{
+    switch (m_type) {
+    case MapType::Static: m_staticMap->insert(key, value); break;
+    case MapType::Qml:    m_qmlMap->insert(key, value);    break;
+    case MapType::Quick:  m_quickMap->insert(key, value);   break;
+    }
 }
 
 void Player::test1()
@@ -86,28 +119,48 @@ void Player::test1()
 
 void Player::test2()
 {
-    connect(m_propertyMap, &PropertyMap::valueChanged, [](const QString& name, const QVariant& value)
-    {
-        qDebug() << name << value;
-    });
+    // valueChanged signal is available on QmlPropertyMap and QuickPropertyMap
+    if (m_qmlMap) {
+        connect(m_qmlMap, &QmlPropertyMap::valueChanged, [](const QString &name, const QVariant &value) {
+            qDebug() << name << value;
+        });
+    } else if (m_quickMap) {
+        connect(m_quickMap, &QuickPropertyMapBase::valueChanged, [](const QByteArray &name, const QVariant &value) {
+            qDebug() << name << value;
+        });
+    }
+    // StaticPropertyMap doesn't have a generic valueChanged signal
 }
 
 void Player::test3()
 {
     qInfo("feeding %s:", m_propertyMap->metaObject()->className());
 
-    for (int size : QVector<int>{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000})
-    {
+    for (int size : QList<int>{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000}) {
         PairData data(size);
         for (int i = 0; i != size; ++i)
             data[i] = {QStringLiteral("x_%1").arg(i).toLatin1(), 0.0};
 
-        PropertyMap p;
-
         QElapsedTimer t;
         t.start();
 
-        init(p, data);
+        switch (m_type) {
+        case MapType::Static: {
+            StaticPropertyMap p;
+            initStatic(p, data);
+            break;
+        }
+        case MapType::Qml: {
+            QmlPropertyMap p;
+            initQml(p, data);
+            break;
+        }
+        case MapType::Quick: {
+            QuickPropertyMap p;
+            initQuick(p, data);
+            break;
+        }
+        }
 
         qInfo("%d %lld", size, t.elapsed());
     }
@@ -120,15 +173,14 @@ void Player::advance()
 
     ++m_step;
 
-    for (int i = 0; i != COUNT; ++i)
-    {
+    for (int i = 0; i != COUNT; ++i) {
         double angle = m_step * m_speed[i];
 
-        m_propertyMap->insert(m_data[3 * i + 0].first, posX(i, angle));
-        m_propertyMap->insert(m_data[3 * i + 1].first, posY(i, angle));
-        m_propertyMap->insert(m_data[3 * i + 2].first, angle + 90);
+        mapInsert(m_data[3 * i + 0].first, posX(i, angle));
+        mapInsert(m_data[3 * i + 1].first, posY(i, angle));
+        mapInsert(m_data[3 * i + 2].first, angle + 90);
     }
 
     if (m_step % 10 == 0)
-        m_propertyMap->insert("fps", int(1000.0 / (t.nsecsElapsed() / 1000000.0)));
+        mapInsert("fps", int(1000.0 / (t.nsecsElapsed() / 1000000.0)));
 }

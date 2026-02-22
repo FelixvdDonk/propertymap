@@ -1,20 +1,20 @@
 #include "QmlPropertyMap.h"
-#include "QmlOpenMetaobject.h"
 
+#include <private/qqmlopenmetaobject_p.h>
 #include <private/qmetaobjectbuilder_p.h>
 
 #include <QDebug>
 
-class QmlPropertyMapMetaObject : public QmlOpenMetaObject
+class QmlPropertyMapMetaObject : public QQmlOpenMetaObject
 {
 public:
     QmlPropertyMapMetaObject(QmlPropertyMap *obj, QmlPropertyMapPrivate *objPriv, const QMetaObject *staticMetaObject);
 
 protected:
-    virtual QVariant propertyWriteValue(int, const QVariant &);
-    virtual void propertyWritten(int index);
-    virtual void propertyCreated(int, QMetaPropertyBuilder &);
-    virtual int createProperty(const char *, const char *);
+    QVariant propertyWriteValue(int, const QVariant &) override;
+    void propertyWritten(int index) override;
+    void propertyCreated(int, QMetaPropertyBuilder &) override;
+    int createProperty(const char *, const char *) override;
 
     const QString &propertyName(int index);
 
@@ -27,25 +27,24 @@ class QmlPropertyMapPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QmlPropertyMap)
 public:
-    QmlPropertyMapMetaObject *mo;
-    QSet<QString> lookup; // speeds up contains()
+    QmlPropertyMapMetaObject *mo = nullptr;
+    QSet<QString> lookup;
     QStringList keys;
 
     QVariant updateValue(const QString &key, const QVariant &input);
     void emitChanged(const QString &key, const QVariant &value);
-    bool validKeyName(const QString& name);
+    bool validKeyName(const QString &name);
 
     const QString &propertyName(int index) const;
 };
 
-bool QmlPropertyMapPrivate::validKeyName(const QString& name)
+bool QmlPropertyMapPrivate::validKeyName(const QString &name)
 {
-    //The following strings shouldn't be used as property names
-    return  name != QLatin1String("keys")
-         && name != QLatin1String("valueChanged")
-         && name != QLatin1String("QObject")
-         && name != QLatin1String("destroyed")
-         && name != QLatin1String("deleteLater");
+    return name != QLatin1String("keys")
+        && name != QLatin1String("valueChanged")
+        && name != QLatin1String("QObject")
+        && name != QLatin1String("destroyed")
+        && name != QLatin1String("deleteLater");
 }
 
 QVariant QmlPropertyMapPrivate::updateValue(const QString &key, const QVariant &input)
@@ -67,7 +66,7 @@ const QString &QmlPropertyMapPrivate::propertyName(int index) const
 }
 
 QmlPropertyMapMetaObject::QmlPropertyMapMetaObject(QmlPropertyMap *obj, QmlPropertyMapPrivate *objPriv, const QMetaObject *staticMetaObject)
-    : QmlOpenMetaObject(obj, staticMetaObject)
+    : QQmlOpenMetaObject(obj, staticMetaObject)
 {
     map = obj;
     priv = objPriv;
@@ -80,7 +79,7 @@ QVariant QmlPropertyMapMetaObject::propertyWriteValue(int index, const QVariant 
 
 void QmlPropertyMapMetaObject::propertyWritten(int index)
 {
-    priv->emitChanged(priv->propertyName(index), operator[](index));
+    priv->emitChanged(priv->propertyName(index), value(index));
 }
 
 void QmlPropertyMapMetaObject::propertyCreated(int, QMetaPropertyBuilder &b)
@@ -93,11 +92,11 @@ int QmlPropertyMapMetaObject::createProperty(const char *name, const char *value
 {
     if (!priv->validKeyName(QString::fromUtf8(name)))
         return -1;
-    return QmlOpenMetaObject::createProperty(name, value);
+    return QQmlOpenMetaObject::createProperty(name, value);
 }
 
 QmlPropertyMap::QmlPropertyMap(QObject *parent)
-: QObject(*allocatePrivate(), parent)
+    : QObject(*allocatePrivate(), parent)
 {
     init(metaObject());
 }
@@ -125,8 +124,8 @@ void QmlPropertyMap::insert(const QString &key, const QVariant &value)
         d->mo->setValue(key.toUtf8(), value);
     } else {
         qWarning() << "Creating property with name"
-                   << key
-                   << "is not permitted, conflicts with internal symbols.";
+                    << key
+                    << "is not permitted, conflicts with internal symbols.";
     }
 }
 
@@ -136,17 +135,17 @@ void QmlPropertyMap::insert(const QVariantMap &data)
 
     QHash<QByteArray, QVariant> tmp;
 
-    for (QVariantMap::ConstIterator i = data.cbegin(), e = data.cend(); i != e; ++i) {
+    for (auto i = data.cbegin(), e = data.cend(); i != e; ++i) {
         if (d->validKeyName(i.key())) {
             tmp.insert(i.key().toUtf8(), i.value());
         } else {
             qWarning() << "Creating property with name"
-                       << i.key()
-                       << "is not permitted, conflicts with internal symbols.";
+                        << i.key()
+                        << "is not permitted, conflicts with internal symbols.";
         }
     }
 
-    d->mo->setValues(tmp);    
+    d->mo->setValues(tmp);
 }
 
 void QmlPropertyMap::insert(const FastData &data)
@@ -158,7 +157,12 @@ void QmlPropertyMap::insert(const FastData &data)
 void QmlPropertyMap::insert(const PairData &data)
 {
     Q_D(QmlPropertyMap);
-    d->mo->setValues(data);
+    // Convert PairData to QHash for the Qt 6 API
+    QHash<QByteArray, QVariant> hash;
+    hash.reserve(data.size());
+    for (const auto &pair : data)
+        hash.insert(pair.first, pair.second);
+    d->mo->setValues(hash);
 }
 
 void QmlPropertyMap::setCached(bool cached)
@@ -167,7 +171,7 @@ void QmlPropertyMap::setCached(bool cached)
     d->mo->setCached(cached);
 }
 
-const QStringList& QmlPropertyMap::keys() const
+const QStringList &QmlPropertyMap::keys() const
 {
     Q_D(const QmlPropertyMap);
     return d->keys;
@@ -199,13 +203,11 @@ bool QmlPropertyMap::contains(const QString &key) const
 
 QVariant &QmlPropertyMap::operator[](const QString &key)
 {
-    //### optimize
     Q_D(QmlPropertyMap);
     QByteArray utf8key = key.toUtf8();
     if (!d->lookup.contains(key))
-        insert(key, QVariant());//force creation -- needed below
-
-    return (*(d->mo))[utf8key];
+        insert(key, QVariant()); // force creation
+    return d->mo->valueRef(utf8key);
 }
 
 QVariant QmlPropertyMap::operator[](const QString &key) const
