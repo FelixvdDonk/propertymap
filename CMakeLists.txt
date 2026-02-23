@@ -51,3 +51,29 @@ set_target_properties(propertymap PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
+# ===========================================================================
+# Servo benchmark: StaticServo (200 Q_PROPERTY) vs QuickServo (QuickPropertyMap)
+# ===========================================================================
+qt_add_executable(servo-benchmark
+    benchmark/main.cpp
+    benchmark/StaticServo.h
+    benchmark/QuickServo.h
+    QuickPropertyMap/QuickPropertyMap.cpp
+    QuickPropertyMap/QuickPropertyMap.h
+)
+
+target_link_libraries(servo-benchmark PRIVATE
+    Qt6::Core
+    Qt6::CorePrivate
+    Qt6::Gui
+    Qt6::Quick
+    Qt6::Qml
+)
+
+qt_add_resources(servo-benchmark "benchmark_qml"
+    PREFIX "/benchmark"
+    BASE benchmark
+    FILES
+        benchmark/ServoView.qml
+)

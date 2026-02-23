@@ -37,6 +37,8 @@ public:
 private:
     /// Type-erased insert that dispatches to the correct backend
     void mapInsert(const QByteArray &key, const QVariant &value);
+    /// Fast insert by cached index (QuickPropertyMap only, falls back to key-based)
+    void mapInsertByIndex(int cachedIndex, const QByteArray &key, const QVariant &value);
 
     MapType m_type;
     QObject *m_propertyMap = nullptr;          // owned, one of the three types
@@ -46,6 +48,8 @@ private:
 
     QList<double> m_speed;
     QList<QPair<QByteArray, QVariant>> m_data;
+    QList<int> m_cachedIndices; // pre-resolved indices for QuickPropertyMap fast path
+    int m_fpsIndex = -1;       // cached index for the "fps" property
     QTimer *m_timer;
     int m_step;
 };

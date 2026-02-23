@@ -14,9 +14,10 @@ namespace {
 
 constexpr int COUNT = 1000;
 constexpr double R = 6;
+constexpr double DEG2RAD = M_PI / 180.0;
 
-double posX(int i, double angle) { return (i / 3) * R * cos(angle * M_PI / 180) + 10; }
-double posY(int i, double angle) { return (i / 3) * R * sin(angle * M_PI / 180) + 10; }
+double posX(int i, double angle) { return (i / 3) * R * cos(angle * DEG2RAD) + 10; }
+double posY(int i, double angle) { return (i / 3) * R * sin(angle * DEG2RAD) + 10; }
 
 using PairData = QList<QPair<QByteArray, QVariant>>;
 
@@ -77,9 +78,10 @@ Player::Player(MapType type, QWindow *parent)
     auto *rng = QRandomGenerator::global();
 
     for (int i = 0; i != COUNT; ++i) {
-        m_data[3 * i + 0] = {QStringLiteral("x_%1").arg(i).toLatin1(), 0.0};
-        m_data[3 * i + 1] = {QStringLiteral("y_%1").arg(i).toLatin1(), 0.0};
-        m_data[3 * i + 2] = {QStringLiteral("r_%1").arg(i).toLatin1(), 0.0};
+        const QByteArray idx = QByteArray::number(i);
+        m_data[3 * i + 0] = {"x_" + idx, 0.0};
+        m_data[3 * i + 1] = {"y_" + idx, 0.0};
+        m_data[3 * i + 2] = {"r_" + idx, 0.0};
 
         m_speed[i] = rng->generateDouble() + 0.1;
     }
@@ -97,6 +99,17 @@ Player::Player(MapType type, QWindow *parent)
 
     rootContext()->setContextProperty("ngi", m_propertyMap);
 
+    // Pre-resolve property indices for the QuickPropertyMap fast path
+    if (m_quickMap) {
+        m_cachedIndices.resize(3 * COUNT);
+        for (int i = 0; i != COUNT; ++i) {
+            m_cachedIndices[3 * i + 0] = m_quickMap->indexOf(m_data[3 * i + 0].first);
+            m_cachedIndices[3 * i + 1] = m_quickMap->indexOf(m_data[3 * i + 1].first);
+            m_cachedIndices[3 * i + 2] = m_quickMap->indexOf(m_data[3 * i + 2].first);
+        }
+        m_fpsIndex = m_quickMap->indexOf("fps");
+    }
+
     test1();
     test2();
     test3();
@@ -108,6 +121,15 @@ void Player::mapInsert(const QByteArray &key, const QVariant &value)
     case MapType::Static: m_staticMap->insert(key, value); break;
     case MapType::Qml:    m_qmlMap->insert(key, value);    break;
     case MapType::Quick:  m_quickMap->insert(key, value);   break;
+    }
+}
+
+void Player::mapInsertByIndex(int cachedIndex, const QByteArray &key, const QVariant &value)
+{
+    switch (m_type) {
+    case MapType::Static: m_staticMap->insert(key, value);        break;
+    case MapType::Qml:    m_qmlMap->insert(key, value);           break;
+    case MapType::Quick:  m_quickMap->insert(cachedIndex, value);  break; // O(1) — no hash lookup
     }
 }
 
@@ -139,7 +161,7 @@ void Player::test3()
     for (int size : QList<int>{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000}) {
         PairData data(size);
         for (int i = 0; i != size; ++i)
-            data[i] = {QStringLiteral("x_%1").arg(i).toLatin1(), 0.0};
+            data[i] = {"x_" + QByteArray::number(i), 0.0};
 
         QElapsedTimer t;
         t.start();
@@ -174,13 +196,14 @@ void Player::advance()
     ++m_step;
 
     for (int i = 0; i != COUNT; ++i) {
-        double angle = m_step * m_speed[i];
+        const double angle = m_step * m_speed[i];
+        const int base = 3 * i;
 
-        mapInsert(m_data[3 * i + 0].first, posX(i, angle));
-        mapInsert(m_data[3 * i + 1].first, posY(i, angle));
-        mapInsert(m_data[3 * i + 2].first, angle + 90);
+        mapInsertByIndex(m_cachedIndices.value(base + 0, -1), m_data[base + 0].first, posX(i, angle));
+        mapInsertByIndex(m_cachedIndices.value(base + 1, -1), m_data[base + 1].first, posY(i, angle));
+        mapInsertByIndex(m_cachedIndices.value(base + 2, -1), m_data[base + 2].first, angle + 90);
     }
 
     if (m_step % 10 == 0)
-        mapInsert("fps", int(1000.0 / (t.nsecsElapsed() / 1000000.0)));
+        mapInsertByIndex(m_fpsIndex, "fps", int(1000.0 / (t.nsecsElapsed() / 1000000.0)));
 }
